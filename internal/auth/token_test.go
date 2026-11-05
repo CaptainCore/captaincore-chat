@@ -65,22 +65,28 @@ func TestRejects(t *testing.T) {
 	escalated := mut(func(c *Claims) { c.Role = RoleOperator }) // validly signed operator token, used below as a payload donor
 
 	cases := map[string]string{
-		"empty":            "",
-		"wrong key":        forged,
-		"wrong prefix":     "v2." + parts[1] + "." + parts[2],
-		"swapped payload":  "v1." + strings.Split(escalated, ".")[1] + "." + parts[2],
-		"truncated sig":    parts[0] + "." + parts[1] + "." + parts[2][:20],
-		"wrong issuer":     mut(func(c *Claims) { c.Issuer = "https://evil.test" }),
-		"wrong audience":   mut(func(c *Claims) { c.Audience = "https://other-chat.test" }),
-		"bad role":         mut(func(c *Claims) { c.Role = "admin" }),
-		"no subject":       mut(func(c *Claims) { c.Subject = 0 }),
-		"expired":          mut(func(c *Claims) { c.IssuedAt = t0.Add(-20 * time.Minute).Unix(); c.Expires = t0.Add(-2 * time.Minute).Unix() }),
-		"too long lived":   mut(func(c *Claims) { c.Expires = t0.Add(2 * time.Hour).Unix() }),
-		"future issued":    mut(func(c *Claims) { c.IssuedAt = t0.Add(10 * time.Minute).Unix(); c.Expires = t0.Add(15 * time.Minute).Unix() }),
-		"oversize":         strings.Repeat("a", MaxTokenBytes+1),
-		"four parts":       good + ".x",
-		"exp before iat":   mut(func(c *Claims) { c.Expires = c.IssuedAt - 1 }),
-		"no issued at":     mut(func(c *Claims) { c.IssuedAt = 0 }),
+		"empty":           "",
+		"wrong key":       forged,
+		"wrong prefix":    "v2." + parts[1] + "." + parts[2],
+		"swapped payload": "v1." + strings.Split(escalated, ".")[1] + "." + parts[2],
+		"truncated sig":   parts[0] + "." + parts[1] + "." + parts[2][:20],
+		"wrong issuer":    mut(func(c *Claims) { c.Issuer = "https://evil.test" }),
+		"wrong audience":  mut(func(c *Claims) { c.Audience = "https://other-chat.test" }),
+		"bad role":        mut(func(c *Claims) { c.Role = "admin" }),
+		"no subject":      mut(func(c *Claims) { c.Subject = 0 }),
+		"expired": mut(func(c *Claims) {
+			c.IssuedAt = t0.Add(-20 * time.Minute).Unix()
+			c.Expires = t0.Add(-2 * time.Minute).Unix()
+		}),
+		"too long lived": mut(func(c *Claims) { c.Expires = t0.Add(2 * time.Hour).Unix() }),
+		"future issued": mut(func(c *Claims) {
+			c.IssuedAt = t0.Add(10 * time.Minute).Unix()
+			c.Expires = t0.Add(15 * time.Minute).Unix()
+		}),
+		"oversize":       strings.Repeat("a", MaxTokenBytes+1),
+		"four parts":     good + ".x",
+		"exp before iat": mut(func(c *Claims) { c.Expires = c.IssuedAt - 1 }),
+		"no issued at":   mut(func(c *Claims) { c.IssuedAt = 0 }),
 	}
 	for name, tok := range cases {
 		if _, err := v.Verify(tok); !errors.Is(err, ErrInvalid) {
