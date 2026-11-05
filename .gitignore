@@ -1,0 +1,10 @@
+# Local runtime state: never commit
+/config.json
+/data/
+*.db
+*.db-wal
+*.db-shm
+*.key
+# Build output
+/captaincore-chat
+/dist/
