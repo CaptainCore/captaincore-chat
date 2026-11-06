@@ -165,3 +165,41 @@ echo base64_encode($pk), "\n", 'v1.' . $payload . '.' . $b64($sig), "\n";
 		t.Fatalf("claims wrong: %+v", c)
 	}
 }
+
+// TestPHPPublishSigner signs a publish body the way the Manager does and
+// checks it here, including a non-ASCII body sent unescaped.
+func TestPHPPublishSigner(t *testing.T) {
+	php, err := exec.LookPath("php")
+	if err != nil {
+		t.Skip("php not installed")
+	}
+	script := `
+if (!function_exists('sodium_crypto_sign_keypair')) { fwrite(STDERR, "no sodium"); exit(3); }
+$kp   = sodium_crypto_sign_keypair();
+$b64  = function ($s) { return rtrim(strtr(base64_encode($s), '+/', '-_'), '='); };
+$body = json_encode(array('event' => array('type' => 'message.created', 'message' => array('body' => "Merci beaucoup 👍 </script>")), 'customer_user_id' => 42, 'internal' => false), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+$ts   = (string) time();
+$sig  = sodium_crypto_sign_detached('captaincore-chat.publish.v1.' . $ts . '.' . $body, sodium_crypto_sign_secretkey($kp));
+echo base64_encode(sodium_crypto_sign_publickey($kp)), "\n", $ts, "\n", $b64($sig), "\n", base64_encode($body), "\n";
+`
+	out, err := exec.Command(php, "-r", script).CombinedOutput()
+	if err != nil {
+		if strings.Contains(string(out), "no sodium") {
+			t.Skip("php sodium extension missing")
+		}
+		t.Fatalf("php: %v\n%s", err, out)
+	}
+	l := strings.Split(strings.TrimSpace(string(out)), "\n")
+	if len(l) != 4 {
+		t.Fatalf("unexpected php output: %q", out)
+	}
+	pub, _ := base64.StdEncoding.DecodeString(l[0])
+	body, _ := base64.StdEncoding.DecodeString(l[3])
+	v := NewVerifier([]ed25519.PublicKey{pub}, iss, aud)
+	if err := v.VerifyPublish(l[1], body, l[2]); err != nil {
+		t.Fatalf("PHP-signed publish rejected: %v", err)
+	}
+	if err := v.VerifyPublish(l[1], append(body, ' '), l[2]); err == nil {
+		t.Fatal("a changed body must not verify")
+	}
+}

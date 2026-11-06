@@ -24,12 +24,27 @@ const (
 // inbound is every frame a client may send.
 //
 //	{"type":"auth","token":"v1...."}            first frame, and to refresh before expiry
-//	{"type":"typing","conversation_id":12}
+//	{"type":"typing","conversation_id":12}                       customer
+//	{"type":"typing","conversation_id":12,"customer_user_id":42} operator
 //	{"type":"ping"}
 type inbound struct {
 	Type           string `json:"type"`
 	Token          string `json:"token"`
 	ConversationID int64  `json:"conversation_id"`
+	CustomerUserID int64  `json:"customer_user_id"`
+}
+
+// typingEvent is the only frame the relay builds itself.
+type typingEvent struct {
+	Type           string     `json:"type"`
+	ConversationID int64      `json:"conversation_id"`
+	User           typingUser `json:"user"`
+}
+
+type typingUser struct {
+	ID       int64  `json:"id"`
+	Name     string `json:"name"`
+	Operator bool   `json:"operator"`
 }
 
 func (s *Server) upgrader() *websocket.Upgrader {
@@ -106,26 +121,26 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 			b, _ := json.Marshal(map[string]any{"type": "reauthed", "expires": nc.Expires})
 			client.Send(b)
 		case "typing":
-			s.wsTyping(r, c, client, in.ConversationID)
+			s.wsTyping(c, client, in)
 		case "ping":
 			client.Send([]byte(`{"type":"pong"}`))
 		}
 	}
 }
 
-// wsTyping relays a typing indicator to the other side of a conversation
-// the sender may see.
-func (s *Server) wsTyping(r *http.Request, c *auth.Claims, client *hub.Client, convID int64) {
-	if convID <= 0 || !s.typingLimit.Allow(strconv.FormatInt(c.Subject, 10)+":"+strconv.FormatInt(convID, 10)) {
+// wsTyping relays a typing indicator. The relay stores nothing, so it does
+// not know who owns a conversation:
+//   - an operator names the customer, and operators are trusted;
+//   - a customer's frame goes to operators only, carrying the sender's id,
+//     and the inbox ignores it unless that id owns the conversation. A
+//     customer can't reach another customer this way.
+func (s *Server) wsTyping(c *auth.Claims, client *hub.Client, in inbound) {
+	if in.ConversationID <= 0 || !s.typingLimit.Allow(strconv.FormatInt(c.Subject, 10)+":"+strconv.FormatInt(in.ConversationID, 10)) {
 		return
 	}
-	conv, err := s.store.GetConversation(r.Context(), convID)
-	if err != nil || (!c.IsOperator() && conv.CustomerUserID != c.Subject) {
-		return
-	}
-	ev := event{Type: "typing", ConversationID: convID, User: &typingUser{Name: displayName(c), Operator: c.IsOperator()}}
+	ev := typingEvent{Type: "typing", ConversationID: in.ConversationID, User: typingUser{ID: c.Subject, Name: displayName(c), Operator: c.IsOperator()}}
 	if c.IsOperator() {
-		s.hub.Publish(ev, conv.CustomerUserID, false, client) // the customer, plus other operators
+		s.hub.Publish(ev, in.CustomerUserID, in.CustomerUserID <= 0, client) // the customer, plus other operators
 		return
 	}
 	s.hub.PublishToOperators(ev, nil)

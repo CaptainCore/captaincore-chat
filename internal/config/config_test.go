@@ -24,7 +24,7 @@ func TestValidateDefaults(t *testing.T) {
 	if err := c.Validate(); err != nil {
 		t.Fatal(err)
 	}
-	if c.Listen != "127.0.0.1:8490" || c.Database != "data/chat.db" {
+	if c.Listen != "127.0.0.1:8490" {
 		t.Fatalf("defaults not applied: %+v", c)
 	}
 	if c.Issuer != "https://anchor.host" {

@@ -20,8 +20,6 @@ type Config struct {
 	// Listen is the address the HTTP server binds to. Caddy terminates TLS
 	// in front of it, so the default stays on loopback.
 	Listen string `json:"listen"`
-	// Database is the SQLite file path.
-	Database string `json:"database"`
 	// Issuer is the Manager's home URL, e.g. https://anchor.host. Tokens
 	// must carry it as "iss".
 	Issuer string `json:"issuer"`
@@ -63,9 +61,6 @@ func Load(path string) (*Config, error) {
 func (c *Config) Validate() error {
 	if c.Listen == "" {
 		c.Listen = "127.0.0.1:8490"
-	}
-	if c.Database == "" {
-		c.Database = "data/chat.db"
 	}
 	var err error
 	if c.Issuer, err = normalizeBase("issuer", c.Issuer); err != nil {

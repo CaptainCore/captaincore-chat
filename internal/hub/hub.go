@@ -122,21 +122,30 @@ func (h *Hub) presenceLocked(online bool) {
 // Publish delivers v to operators and, unless internal, to the customer
 // who owns the conversation. skip (may be nil) is not sent to, e.g. the
 // connection that produced a typing event.
-func (h *Hub) Publish(v any, customerID int64, internal bool, skip *Client) {
+func (h *Hub) Publish(v any, customerID int64, internal bool, skip *Client) int {
 	b, err := json.Marshal(v)
 	if err != nil {
-		return
+		return 0
 	}
+	return h.PublishRaw(b, customerID, internal, skip)
+}
+
+// PublishRaw is Publish for an already encoded frame. It returns how many
+// clients it was queued for.
+func (h *Hub) PublishRaw(b []byte, customerID int64, internal bool, skip *Client) int {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
+	n := 0
 	for c := range h.clients {
 		if c == skip {
 			continue
 		}
-		if c.Operator || (!internal && c.UserID == customerID) {
+		if c.Operator || (!internal && customerID > 0 && c.UserID == customerID) {
 			c.Send(b)
+			n++
 		}
 	}
+	return n
 }
 
 // PublishToOperators delivers v to operators only.

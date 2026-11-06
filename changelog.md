@@ -3,22 +3,18 @@
 ## [Unreleased]
 
 ### Added
-- `captaincore-chat serve`: REST API under `/v1`, websocket at `/v1/ws`, health check at `/healthz`, and a graceful shutdown.
-- Identity: Ed25519 tokens signed by the Manager (`v1.<payload>.<signature>`). The service holds public keys only, and several keys can be listed for rotation. A test signs with PHP sodium, as the Manager will, and verifies in Go.
-- Storage in a single SQLite file with versioned migrations: conversations, messages and read marks.
-- Conversation rules:
-  - A customer reply starts the waiting clock and reopens a closed or snoozed thread. An operator reply clears the clock.
-  - Notes and internal events are never shown to customers.
-  - Snoozes wake on their own.
-- Access rules:
-  - Customers see only their own conversations, and someone else's returns 404.
-  - Site and account links must come from the token.
-  - Customers can resolve or reopen a conversation. Everything else is for operators.
-- Live events: new conversations and messages, status changes, typing, read receipts, and whether an operator is online. Customers receive only their own public events.
+- `captaincore-chat serve`: a stateless live relay for CaptainCore Manager chat. It serves a websocket at `/v1/ws` and a health check at `/healthz`, and shuts down gracefully. Conversations are stored in the Manager, which enforces every rule; this service stores nothing.
+- `POST /internal/publish`: the Manager sends each change as a signed event.
+  - The signature is Ed25519 over a domain-separated string with a timestamp, and each signature is accepted once.
+  - Operators get every event. The owning customer gets the event unless it is internal or belongs to a guest conversation.
+- Identity: Ed25519 tokens signed by the Manager (`v1.<payload>.<signature>`). The service holds public keys only, and several keys can be listed for rotation. Tests sign tokens and publish bodies with PHP sodium, as the Manager does, and verify them in Go.
+- Live frames:
+  - Typing: an operator names the customer it is for. A customer's typing goes to operators only, tagged with the sender's id.
+  - Presence: whether an operator is online.
+  - Token refresh without reconnecting.
 - Hardening:
-  - An Origin allowlist for CORS and websockets.
+  - An Origin allowlist for websockets.
   - Tokens are never accepted in URLs or written to logs.
-  - Message bodies are plain text with control characters stripped, capped at 10,000 characters.
-  - Rate limits of 20 messages and 5 new conversations per user per minute.
-  - Request bodies are capped at 64 KB and unknown JSON fields are rejected.
-- `captaincore-chat migrate`, `version`, `dev keys` and `dev token`.
+  - Publish bodies are capped at 512 KB, and unknown fields are rejected.
+  - Clients that can't keep up are disconnected.
+- `captaincore-chat version`, `dev keys` and `dev token`.

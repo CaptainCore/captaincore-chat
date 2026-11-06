@@ -10,41 +10,39 @@ import (
 	"net"
 	"net/http"
 	"runtime/debug"
+	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/CaptainCore/captaincore-chat/internal/auth"
 	"github.com/CaptainCore/captaincore-chat/internal/config"
 	"github.com/CaptainCore/captaincore-chat/internal/hub"
-	"github.com/CaptainCore/captaincore-chat/internal/store"
 	"github.com/CaptainCore/captaincore-chat/version"
 )
 
-const maxBodyBytes = 64 << 10
-
-// Server wires config, store, verifier and hub to HTTP.
+// Server wires config, verifier and hub to HTTP. It stores nothing: the
+// Manager owns every conversation and calls /internal/publish after each
+// change.
 type Server struct {
 	cfg      *config.Config
-	store    *store.Store
 	verifier *auth.Verifier
 	hub      *hub.Hub
 	log      *slog.Logger
+	replay   *replayCache
 
-	msgLimit    *limiter // messages per user
-	createLimit *limiter // new conversations per user
 	typingLimit *limiter // typing frames per user+conversation
 }
 
 // New builds a Server.
-func New(cfg *config.Config, st *store.Store, log *slog.Logger) *Server {
+func New(cfg *config.Config, log *slog.Logger) *Server {
+	v := auth.NewVerifier(cfg.Keys(), cfg.Issuer, cfg.Audience)
 	return &Server{
 		cfg:         cfg,
-		store:       st,
-		verifier:    auth.NewVerifier(cfg.Keys(), cfg.Issuer, cfg.Audience),
+		verifier:    v,
 		hub:         hub.New(),
 		log:         log,
-		msgLimit:    newLimiter(20, time.Minute),
-		createLimit: newLimiter(5, time.Minute),
+		replay:      newReplayCache(2 * v.Skew),
 		typingLimit: newLimiter(1, 2*time.Second),
 	}
 }
@@ -60,26 +58,8 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", s.handleHealth)
 	mux.HandleFunc("GET /v1/ws", s.handleWS)
-
-	authed := func(h func(http.ResponseWriter, *http.Request, *auth.Claims)) http.HandlerFunc {
-		return func(w http.ResponseWriter, r *http.Request) {
-			c, ok := s.authenticate(r)
-			if !ok {
-				writeError(w, http.StatusUnauthorized, "unauthorized", "A valid token is required.")
-				return
-			}
-			h(w, r, c)
-		}
-	}
-	mux.HandleFunc("GET /v1/me", authed(s.handleMe))
-	mux.HandleFunc("GET /v1/conversations", authed(s.handleList))
-	mux.HandleFunc("POST /v1/conversations", authed(s.handleCreate))
-	mux.HandleFunc("GET /v1/conversations/{id}", authed(s.handleGet))
-	mux.HandleFunc("PATCH /v1/conversations/{id}", authed(s.handlePatch))
-	mux.HandleFunc("POST /v1/conversations/{id}/messages", authed(s.handlePostMessage))
-	mux.HandleFunc("POST /v1/conversations/{id}/read", authed(s.handleRead))
-
-	return s.recoverer(s.logRequests(s.securityHeaders(s.cors(mux))))
+	mux.HandleFunc("POST /internal/publish", s.handlePublish)
+	return s.recoverer(s.logRequests(s.securityHeaders(mux)))
 }
 
 // Run serves until ctx is cancelled, then shuts down gracefully.
@@ -91,11 +71,8 @@ func (s *Server) Run(ctx context.Context) error {
 		ReadTimeout:       30 * time.Second,
 		IdleTimeout:       120 * time.Second,
 		MaxHeaderBytes:    32 << 10,
-		// No WriteTimeout: websockets are long-lived. REST handlers are all
-		// quick SQLite calls.
+		// No WriteTimeout: websockets are long-lived.
 	}
-	go s.wakeLoop(ctx)
-
 	errc := make(chan error, 1)
 	go func() {
 		s.log.Info("listening", "addr", s.cfg.Listen, "version", version.Version)
@@ -116,83 +93,28 @@ func (s *Server) Run(ctx context.Context) error {
 	return nil
 }
 
-// wakeLoop reopens snoozed conversations when their time comes.
-func (s *Server) wakeLoop(ctx context.Context) {
-	t := time.NewTicker(30 * time.Second)
-	defer t.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-t.C:
-			s.WakeSnoozed(ctx)
-		}
-	}
-}
-
-// WakeSnoozed runs one snooze sweep and publishes the results.
-func (s *Server) WakeSnoozed(ctx context.Context) {
-	convs, msgs, err := s.store.WakeSnoozed(ctx)
-	if err != nil {
-		s.log.Error("wake snoozed", "err", err)
-	}
-	for i := range convs {
-		c, m := convs[i], msgs[i]
-		s.hub.PublishToOperators(event{Type: "message.created", ConversationID: c.ID, Message: &m}, nil)
-		s.hub.Publish(event{Type: "conversation.updated", ConversationID: c.ID, Conversation: &c}, c.CustomerUserID, false, nil)
-	}
-}
-
-// authenticate reads "Authorization: Bearer <token>". Tokens never travel
-// in query strings, which end up in access logs.
-func (s *Server) authenticate(r *http.Request) (*auth.Claims, bool) {
-	h := r.Header.Get("Authorization")
-	tok, ok := strings.CutPrefix(h, "Bearer ")
-	if !ok {
-		return nil, false
-	}
-	c, err := s.verifier.Verify(strings.TrimSpace(tok))
-	if err != nil {
-		s.log.Info("token rejected", "reason", err.Error(), "path", r.URL.Path)
-		return nil, false
-	}
-	return c, true
-}
-
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
-	if err := s.store.Ping(r.Context()); err != nil {
-		writeError(w, http.StatusServiceUnavailable, "database", "Database unavailable.")
-		return
-	}
 	writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "version": version.Version})
 }
 
-// ── middleware ──
-
-// cors allows the configured Manager origins. Auth is a bearer header, not
-// a cookie, so there is no Allow-Credentials and no CSRF surface.
-func (s *Server) cors(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		origin := r.Header.Get("Origin")
-		allowed := origin != "" && s.cfg.OriginAllowed(origin)
-		if allowed {
-			w.Header().Set("Access-Control-Allow-Origin", origin)
-			w.Header().Add("Vary", "Origin")
+// displayName is the token's name, cleaned for display.
+func displayName(c *auth.Claims) string {
+	n := strings.TrimSpace(strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) || (r >= 0x202A && r <= 0x202E) || (r >= 0x2066 && r <= 0x2069) {
+			return -1
 		}
-		if r.Method == http.MethodOptions {
-			if allowed && r.Header.Get("Access-Control-Request-Method") != "" {
-				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, OPTIONS")
-				w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
-				w.Header().Set("Access-Control-Max-Age", "600")
-				w.WriteHeader(http.StatusNoContent)
-				return
-			}
-			w.WriteHeader(http.StatusForbidden)
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
+		return r
+	}, c.Name))
+	if n == "" {
+		return "User #" + strconv.FormatInt(c.Subject, 10)
+	}
+	if r := []rune(n); len(r) > 100 {
+		n = string(r[:100])
+	}
+	return n
 }
+
+// ── middleware ──
 
 func (s *Server) securityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -201,9 +123,6 @@ func (s *Server) securityHeaders(next http.Handler) http.Handler {
 		h.Set("Referrer-Policy", "no-referrer")
 		h.Set("Cache-Control", "no-store")
 		h.Set("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'")
-		if r.Body != nil {
-			r.Body = http.MaxBytesReader(w, r.Body, maxBodyBytes)
-		}
 		next.ServeHTTP(w, r)
 	})
 }
@@ -262,17 +181,4 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 
 func writeError(w http.ResponseWriter, status int, code, msg string) {
 	writeJSON(w, status, map[string]any{"error": map[string]string{"code": code, "message": msg}})
-}
-
-// decode reads exactly one JSON object with no unknown fields.
-func decode(r *http.Request, v any) error {
-	dec := json.NewDecoder(r.Body)
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(v); err != nil {
-		return err
-	}
-	if dec.More() {
-		return errors.New("trailing data after JSON object")
-	}
-	return nil
 }

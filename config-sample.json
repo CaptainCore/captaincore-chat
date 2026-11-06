@@ -1,6 +1,5 @@
 {
   "listen": "127.0.0.1:8490",
-  "database": "data/chat.db",
   "issuer": "https://anchor.host",
   "audience": "https://chat.example.com",
   "public_keys": ["<base64 Ed25519 public key from the Manager>"],
