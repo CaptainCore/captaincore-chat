@@ -80,7 +80,7 @@ X-Chat-Signature: <base64url Ed25519 signature>
 - The body is at most 512 KB. Unknown fields get 400.
 - Routing: operators get every event. The customer gets it unless `internal` is true or `customer_user_id` is 0 (a guest conversation).
 - The event types `typing`, `presence` and `ready` are reserved for the relay.
-- The response is `{"delivered":N,"customer":M}`: the number of connections it was queued for, and how many of them belong to the customer. The Manager uses `customer` to decide how soon to email an unread reply.
+- The response is `{"delivered":N,"customer":M,"watching":[ids]}`: the number of connections it was queued for, how many of them belong to the customer, and the operators who have the inbox on screen and in use. The Manager uses `customer` to decide how soon to email an unread reply, and `watching` to skip phone notifications for operators at their desk.
 
 The PHP signer:
 
@@ -112,6 +112,7 @@ Client to server:
 | `{"type":"auth","token":"…"}` | First frame, and refreshes. |
 | `{"type":"typing","conversation_id":N}` | Customers. Sent to operators with the sender's `user.id`. Operators ignore it unless that id owns the conversation. |
 | `{"type":"typing","conversation_id":N,"customer_user_id":C}` | Operators. Sent to customer C and the other operators. Typing is limited to one frame every 2 seconds per conversation. |
+| `{"type":"focus","active":true}` | Operators only: the inbox is on screen and in use (`false` when hidden or idle). Ignored from customers. |
 | `{"type":"ping"}` | Answered with `{"type":"pong"}`. |
 
 Server to client:

@@ -9,12 +9,17 @@ package hub
 import (
 	"encoding/json"
 	"sync"
+	"sync/atomic"
 )
 
 // Client is one websocket connection as the hub sees it.
 type Client struct {
 	UserID   int64
 	Operator bool
+	// Watching: an operator with the inbox on screen and in use (the
+	// client says so with focus frames). The Manager skips phone
+	// notifications for operators who are watching.
+	Watching atomic.Bool
 
 	send     chan []byte
 	done     chan struct{}
@@ -151,6 +156,22 @@ func (h *Hub) PublishRaw(b []byte, customerID int64, internal bool, skip *Client
 		}
 	}
 	return n, customer
+}
+
+// WatchingOperators lists the operators (user ids, each once) with at
+// least one connection that is watching the inbox.
+func (h *Hub) WatchingOperators() []int64 {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	seen := map[int64]bool{}
+	out := []int64{}
+	for c := range h.clients {
+		if c.Operator && c.Watching.Load() && !seen[c.UserID] {
+			seen[c.UserID] = true
+			out = append(out, c.UserID)
+		}
+	}
+	return out
 }
 
 // PublishToOperators delivers v to operators only.

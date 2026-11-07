@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -279,4 +280,17 @@ func TestPublishRouting(t *testing.T) {
 	}
 	quiet(t, priya, "priya")
 	quiet(t, marcus, "marcus")
+
+	// Watching: only an operator's focus frame counts; a customer's is ignored.
+	marcus.WriteJSON(map[string]any{"type": "focus", "active": true})
+	austin.WriteJSON(map[string]any{"type": "focus", "active": true})
+	time.Sleep(100 * time.Millisecond)
+	if _, out := e.publish(event("conversation.updated", 7, 42, false, nil), nil, ""); fmt.Sprint(out["watching"]) != "[3]" {
+		t.Fatalf("watching = %v, want [3]", out["watching"])
+	}
+	austin.WriteJSON(map[string]any{"type": "focus", "active": false})
+	time.Sleep(100 * time.Millisecond)
+	if _, out := e.publish(event("conversation.updated", 9, 42, false, nil), nil, ""); fmt.Sprint(out["watching"]) != "[]" {
+		t.Fatalf("watching after blur = %v, want []", out["watching"])
+	}
 }

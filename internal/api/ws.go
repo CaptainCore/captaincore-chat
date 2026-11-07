@@ -26,9 +26,11 @@ const (
 //	{"type":"auth","token":"v1...."}            first frame, and to refresh before expiry
 //	{"type":"typing","conversation_id":12}                       customer
 //	{"type":"typing","conversation_id":12,"customer_user_id":42} operator
+//	{"type":"focus","active":true}  operator: inbox on screen and in use
 //	{"type":"ping"}
 type inbound struct {
 	Type           string `json:"type"`
+	Active         bool   `json:"active"`
 	Token          string `json:"token"`
 	ConversationID int64  `json:"conversation_id"`
 	CustomerUserID int64  `json:"customer_user_id"`
@@ -122,6 +124,10 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 			client.Send(b)
 		case "typing":
 			s.wsTyping(c, client, in)
+		case "focus":
+			if c.IsOperator() {
+				client.Watching.Store(in.Active)
+			}
 		case "ping":
 			client.Send([]byte(`{"type":"pong"}`))
 		}

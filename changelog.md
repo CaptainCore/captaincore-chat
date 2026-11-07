@@ -7,7 +7,7 @@
 - `POST /internal/publish`: the Manager sends each change as a signed event.
   - The signature is Ed25519 over a domain-separated string with a timestamp, and each signature is accepted once.
   - Operators get every event. The owning customer gets the event unless it is internal or belongs to a guest conversation.
-  - The response says how many connections got the event and how many of those were the customer's.
+  - The response says how many connections got the event, how many of those were the customer's, and which operators are watching the inbox (from their `focus` frames).
 - Identity: Ed25519 tokens signed by the Manager (`v1.<payload>.<signature>`). The service holds public keys only, and several keys can be listed for rotation. Tests sign tokens and publish bodies with PHP sodium, as the Manager does, and verify them in Go.
 - Live frames:
   - Typing: an operator names the customer it is for. A customer's typing goes to operators only, tagged with the sender's id.

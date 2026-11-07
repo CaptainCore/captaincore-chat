@@ -60,7 +60,7 @@ func (s *Server) handlePublish(w http.ResponseWriter, r *http.Request) {
 	// operators only.
 	internal := req.Internal || req.CustomerUserID == 0
 	n, customer := s.hub.PublishRaw(req.Event, req.CustomerUserID, internal, nil)
-	writeJSON(w, http.StatusOK, map[string]any{"delivered": n, "customer": customer})
+	writeJSON(w, http.StatusOK, map[string]any{"delivered": n, "customer": customer, "watching": s.hub.WatchingOperators()})
 }
 
 // replayCache remembers signatures for twice the clock skew, which is
