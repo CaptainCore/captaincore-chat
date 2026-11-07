@@ -59,8 +59,8 @@ func (s *Server) handlePublish(w http.ResponseWriter, r *http.Request) {
 	// A guest conversation (customer 0) or an internal event reaches
 	// operators only.
 	internal := req.Internal || req.CustomerUserID == 0
-	n := s.hub.PublishRaw(req.Event, req.CustomerUserID, internal, nil)
-	writeJSON(w, http.StatusOK, map[string]any{"delivered": n})
+	n, customer := s.hub.PublishRaw(req.Event, req.CustomerUserID, internal, nil)
+	writeJSON(w, http.StatusOK, map[string]any{"delivered": n, "customer": customer})
 }
 
 // replayCache remembers signatures for twice the clock skew, which is

@@ -80,7 +80,7 @@ X-Chat-Signature: <base64url Ed25519 signature>
 - The body is at most 512 KB. Unknown fields get 400.
 - Routing: operators get every event. The customer gets it unless `internal` is true or `customer_user_id` is 0 (a guest conversation).
 - The event types `typing`, `presence` and `ready` are reserved for the relay.
-- The response is `{"delivered":N}`, the number of connections it was queued for.
+- The response is `{"delivered":N,"customer":M}`: the number of connections it was queued for, and how many of them belong to the customer. The Manager uses `customer` to decide how soon to email an unread reply.
 
 The PHP signer:
 

@@ -247,15 +247,15 @@ func TestPublishRouting(t *testing.T) {
 	}
 
 	// A note: operators only.
-	if _, out := e.publish(event("message.created", 7, 42, true, map[string]any{"message": map[string]any{"body": "internal: plugin X"}}), nil, ""); out["delivered"] != float64(1) {
-		t.Fatalf("note delivered to %v", out["delivered"])
+	if _, out := e.publish(event("message.created", 7, 42, true, map[string]any{"message": map[string]any{"body": "internal: plugin X"}}), nil, ""); out["delivered"] != float64(1) || out["customer"] != float64(0) {
+		t.Fatalf("note delivered to %v (customer %v)", out["delivered"], out["customer"])
 	}
 	if m := next(t, austin, "message.created"); m["message"].(map[string]any)["body"] != "internal: plugin X" {
 		t.Fatalf("operator note: %v", m)
 	}
 	// A reply: operators and the owner.
-	if _, out := e.publish(event("message.created", 7, 42, false, map[string]any{"message": map[string]any{"body": "Looking now"}}), nil, ""); out["delivered"] != float64(2) {
-		t.Fatalf("reply delivered to %v", out["delivered"])
+	if _, out := e.publish(event("message.created", 7, 42, false, map[string]any{"message": map[string]any{"body": "Looking now"}}), nil, ""); out["delivered"] != float64(2) || out["customer"] != float64(1) {
+		t.Fatalf("reply delivered to %v (customer %v)", out["delivered"], out["customer"])
 	}
 	if m := next(t, priya, "message.created"); m["message"].(map[string]any)["body"] != "Looking now" {
 		t.Fatalf("customer got %v (the note must never arrive)", m)

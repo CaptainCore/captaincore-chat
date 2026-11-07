@@ -127,25 +127,30 @@ func (h *Hub) Publish(v any, customerID int64, internal bool, skip *Client) int 
 	if err != nil {
 		return 0
 	}
-	return h.PublishRaw(b, customerID, internal, skip)
+	n, _ := h.PublishRaw(b, customerID, internal, skip)
+	return n
 }
 
 // PublishRaw is Publish for an already encoded frame. It returns how many
-// clients it was queued for.
-func (h *Hub) PublishRaw(b []byte, customerID int64, internal bool, skip *Client) int {
+// clients it was queued for, and how many of those were the customer's own
+// connections (the Manager uses that to decide how soon to email).
+func (h *Hub) PublishRaw(b []byte, customerID int64, internal bool, skip *Client) (n, customer int) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
-	n := 0
 	for c := range h.clients {
 		if c == skip {
 			continue
 		}
-		if c.Operator || (!internal && customerID > 0 && c.UserID == customerID) {
+		toCustomer := !internal && customerID > 0 && !c.Operator && c.UserID == customerID
+		if c.Operator || toCustomer {
 			c.Send(b)
 			n++
+			if toCustomer {
+				customer++
+			}
 		}
 	}
-	return n
+	return n, customer
 }
 
 // PublishToOperators delivers v to operators only.
