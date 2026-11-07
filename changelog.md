@@ -11,6 +11,7 @@
 - Identity: Ed25519 tokens signed by the Manager (`v1.<payload>.<signature>`). The service holds public keys only, and several keys can be listed for rotation. Tests sign tokens and publish bodies with PHP sodium, as the Manager does, and verify them in Go.
 - Live frames:
   - Typing: an operator names the customer it is for. A customer's typing goes to operators only, tagged with the sender's id.
+  - Draft preview: a customer's typing frame may carry the draft so far, which operators see as it is written (its own rate limit, last 1,000 characters). Operators' drafts are never relayed.
   - Presence: whether an operator is online.
   - Token refresh without reconnecting.
 - Hardening:

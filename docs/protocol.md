@@ -111,7 +111,8 @@ Client to server:
 |---|---|
 | `{"type":"auth","token":"…"}` | First frame, and refreshes. |
 | `{"type":"typing","conversation_id":N}` | Customers. Sent to operators with the sender's `user.id`. Operators ignore it unless that id owns the conversation. |
-| `{"type":"typing","conversation_id":N,"customer_user_id":C}` | Operators. Sent to customer C and the other operators. Typing is limited to one frame every 2 seconds per conversation. |
+| `{"type":"typing","conversation_id":N,"text":"…"}` | Customers, as they type. A draft preview: operators receive the text (the last 1,000 characters; `""` once cleared). Its own limit: four frames, refilling two a second, per conversation. |
+| `{"type":"typing","conversation_id":N,"customer_user_id":C}` | Operators. Sent to customer C and the other operators. Typing is limited to one frame every 2 seconds per conversation. An operator's `text` is dropped: staff drafts are never relayed. |
 | `{"type":"focus","active":true}` | Operators only: the inbox is on screen and in use (`false` when hidden or idle). Ignored from customers. |
 | `{"type":"ping"}` | Answered with `{"type":"pong"}`. |
 
@@ -122,6 +123,6 @@ Server to client:
 | `conversation.created` (`conversation`, `message`) | Operators and the owner. |
 | `conversation.updated` (`conversation`) | Operators and the owner. |
 | `message.created` (`message`) | Operators. The owner too, unless `message.internal`. |
-| `typing` (`conversation_id`, `user`: `{id, name, operator}`) | See above. |
+| `typing` (`conversation_id`, `user`: `{id, name, operator}`, `text` on a customer's draft preview) | See above. |
 | `read` (`conversation_id`, `message_id`) | Operators, when the customer reads. |
 | `presence` (`operators_online`) | Customers, when the first operator connects or the last one leaves. |

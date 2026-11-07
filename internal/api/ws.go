@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"time"
+	"unicode/utf8"
 
 	"github.com/CaptainCore/captaincore-chat/internal/auth"
 	"github.com/CaptainCore/captaincore-chat/internal/hub"
@@ -25,22 +27,30 @@ const (
 //
 //	{"type":"auth","token":"v1...."}            first frame, and to refresh before expiry
 //	{"type":"typing","conversation_id":12}                       customer
+//	{"type":"typing","conversation_id":12,"text":"draft so far"}  customer, with a draft preview for operators
 //	{"type":"typing","conversation_id":12,"customer_user_id":42} operator
 //	{"type":"focus","active":true}  operator: inbox on screen and in use
 //	{"type":"ping"}
 type inbound struct {
-	Type           string `json:"type"`
-	Active         bool   `json:"active"`
-	Token          string `json:"token"`
-	ConversationID int64  `json:"conversation_id"`
-	CustomerUserID int64  `json:"customer_user_id"`
+	Type           string  `json:"type"`
+	Active         bool    `json:"active"`
+	Token          string  `json:"token"`
+	ConversationID int64   `json:"conversation_id"`
+	CustomerUserID int64   `json:"customer_user_id"`
+	Text           *string `json:"text"`
 }
+
+// maxDraft caps a customer's draft preview (runes).
+const maxDraft = 1000
 
 // typingEvent is the only frame the relay builds itself.
 type typingEvent struct {
 	Type           string     `json:"type"`
 	ConversationID int64      `json:"conversation_id"`
 	User           typingUser `json:"user"`
+	// Text is the customer's draft so far ("" once cleared). Only customer
+	// frames carry it, and only operators receive those.
+	Text *string `json:"text,omitempty"`
 }
 
 type typingUser struct {
@@ -141,10 +151,24 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 //     and the inbox ignores it unless that id owns the conversation. A
 //     customer can't reach another customer this way.
 func (s *Server) wsTyping(c *auth.Claims, client *hub.Client, in inbound) {
-	if in.ConversationID <= 0 || !s.typingLimit.Allow(strconv.FormatInt(c.Subject, 10)+":"+strconv.FormatInt(in.ConversationID, 10)) {
+	key := strconv.FormatInt(c.Subject, 10) + ":" + strconv.FormatInt(in.ConversationID, 10)
+	// A draft preview updates as the customer types, so it gets its own,
+	// faster budget. Operators' drafts are never relayed.
+	draft := in.Text != nil && !c.IsOperator()
+	if in.ConversationID <= 0 || (draft && !s.draftLimit.Allow(key)) || (!draft && !s.typingLimit.Allow(key)) {
 		return
 	}
 	ev := typingEvent{Type: "typing", ConversationID: in.ConversationID, User: typingUser{ID: c.Subject, Name: displayName(c), Operator: c.IsOperator()}}
+	if draft {
+		t := *in.Text
+		if !utf8.ValidString(t) {
+			t = strings.ToValidUTF8(t, "")
+		}
+		if r := []rune(t); len(r) > maxDraft {
+			t = string(r[len(r)-maxDraft:]) // the end is what they're typing now
+		}
+		ev.Text = &t
+	}
 	if c.IsOperator() {
 		s.hub.Publish(ev, in.CustomerUserID, in.CustomerUserID <= 0, client) // the customer, plus other operators
 		return

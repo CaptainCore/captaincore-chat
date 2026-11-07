@@ -278,6 +278,17 @@ func TestPublishRouting(t *testing.T) {
 	if ev := next(t, austin, "typing"); ev["user"].(map[string]any)["id"] != float64(99) {
 		t.Fatalf("customer typing should carry the sender id: %v", ev)
 	}
+	// Draft preview: a customer's text reaches operators, on its own budget
+	// (right after the plain typing frame above).
+	marcus.WriteJSON(map[string]any{"type": "typing", "conversation_id": 7, "text": "My site is do"})
+	if ev := next(t, austin, "typing"); ev["text"] != "My site is do" {
+		t.Fatalf("draft preview: %v", ev)
+	}
+	// An operator's draft text is never relayed.
+	austin.WriteJSON(map[string]any{"type": "typing", "conversation_id": 8, "customer_user_id": 99, "text": "secret draft"})
+	if ev := next(t, marcus, "typing"); ev["text"] != nil {
+		t.Fatalf("operator draft leaked: %v", ev)
+	}
 	quiet(t, priya, "priya")
 	quiet(t, marcus, "marcus")
 

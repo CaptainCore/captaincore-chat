@@ -32,6 +32,7 @@ type Server struct {
 	replay   *replayCache
 
 	typingLimit *limiter // typing frames per user+conversation
+	draftLimit  *limiter // customer draft previews per user+conversation
 }
 
 // New builds a Server.
@@ -44,6 +45,7 @@ func New(cfg *config.Config, log *slog.Logger) *Server {
 		log:         log,
 		replay:      newReplayCache(2 * v.Skew),
 		typingLimit: newLimiter(1, 2*time.Second),
+		draftLimit:  newLimiter(4, 2*time.Second),
 	}
 }
 
