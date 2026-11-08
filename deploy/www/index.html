@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>CaptainCore Chat</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cpath fill='%233b82f6' d='M14 10h36a8 8 0 0 1 8 8v20a8 8 0 0 1-8 8H30l-12 9v-9h-4a8 8 0 0 1-8-8V18a8 8 0 0 1 8-8z'/%3E%3C/svg%3E">
+<style>
+  :root { color-scheme: light dark; --bg: #f6f7f9; --fg: #1f2937; --muted: #6b7280; --accent: #3b82f6; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #0f1115; --fg: #e5e7eb; --muted: #9ca3af; --accent: #60a5fa; } }
+  html, body { height: 100%; margin: 0; }
+  body { display: grid; place-items: center; background: var(--bg); color: var(--fg);
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { text-align: center; }
+  svg { width: 96px; height: 96px; display: block; margin: 0 auto 18px; }
+  .dot { fill: var(--bg); animation: blink 1.4s infinite both; }
+  .dot:nth-child(3) { animation-delay: .2s; } .dot:nth-child(4) { animation-delay: .4s; }
+  @keyframes blink { 0%, 80%, 100% { opacity: .35; } 40% { opacity: 1; } }
+  @media (prefers-reduced-motion: reduce) { .dot { animation: none; } }
+  p { margin: 0; color: var(--muted); font-size: 13px; letter-spacing: .02em; }
+</style>
+</head>
+<body>
+<main>
+  <svg viewBox="0 0 64 64" role="img" aria-label="Chat">
+    <path fill="var(--accent)" d="M14 10h36a8 8 0 0 1 8 8v20a8 8 0 0 1-8 8H30l-12 9v-9h-4a8 8 0 0 1-8-8V18a8 8 0 0 1 8-8z"/>
+    <circle class="dot" cx="22" cy="28" r="3.5"/>
+    <circle class="dot" cx="32" cy="28" r="3.5"/>
+    <circle class="dot" cx="42" cy="28" r="3.5"/>
+  </svg>
+  <p>CaptainCore Chat</p>
+</main>
+</body>
+</html>

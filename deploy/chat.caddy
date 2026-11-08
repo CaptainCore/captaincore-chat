@@ -1,13 +1,16 @@
 # Caddy site for the relay. setup-host.sh installs this as
 # /etc/caddy/captaincore-chat.caddy with the real hostname and imports it.
 # Browsers connect to /v1/ws, the Manager posts signed events to
-# /internal/publish; anything else is a 404.
+# /internal/publish. Everything else is the static page in deploy/www
+# (install-remote.sh copies it). Nothing here is for search engines.
 CHAT_HOST {
+	header X-Robots-Tag "noindex, nofollow"
 	@relay path /v1/ws /internal/publish /healthz
 	handle @relay {
 		reverse_proxy 127.0.0.1:8490
 	}
 	handle {
-		respond 404
+		root * /srv/captaincore-chat/www
+		file_server
 	}
 }

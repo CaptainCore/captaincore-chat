@@ -34,6 +34,7 @@ if [ ! -f /swapfile ]; then
 fi
 id captaincore-chat >/dev/null 2>&1 || useradd --system --no-create-home --shell /usr/sbin/nologin captaincore-chat
 install -d -m 0755 /opt/captaincore-chat
+install -d -m 0755 /srv/captaincore-chat/www
 install -d -m 0750 -g captaincore-chat /etc/captaincore-chat
 install -m 0644 /tmp/captaincore-chat.caddy /etc/caddy/captaincore-chat.caddy
 grep -q 'import /etc/caddy/captaincore-chat.caddy' /etc/caddy/Caddyfile || {

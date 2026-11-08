@@ -16,6 +16,7 @@ git -C "$repo" worktree add --detach --quiet "$tmp/src" "$commit"
 (cd "$tmp/src" && GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath \
 	-ldflags "-s -w -X github.com/CaptainCore/captaincore-chat/version.Version=$version" -o "$tmp/captaincore-chat" .)
 scp -q "$tmp/captaincore-chat" "$host:/opt/captaincore-chat/captaincore-chat.new"
+scp -q "$tmp/src/deploy/www/"* "$host:/srv/captaincore-chat/www/"
 scp -q "$tmp/src/deploy/captaincore-chat.service" "$host:/etc/systemd/system/captaincore-chat.service"
 ssh "$host" 'chmod 0755 /opt/captaincore-chat/captaincore-chat.new \
 	&& mv /opt/captaincore-chat/captaincore-chat.new /opt/captaincore-chat/captaincore-chat \
