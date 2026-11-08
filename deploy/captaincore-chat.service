@@ -6,6 +6,8 @@
 Description=CaptainCore Chat relay
 After=network-online.target
 Wants=network-online.target
+# Until the Manager's config is in place there is nothing to run.
+ConditionPathExists=/etc/captaincore-chat/config.json
 
 [Service]
 User=captaincore-chat
