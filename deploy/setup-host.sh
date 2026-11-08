@@ -12,14 +12,18 @@ sed "s/CHAT_HOST/$name/" "$dir/chat.caddy" | ssh "$host" 'cat > /tmp/captaincore
 ssh "$host" 'bash -s' <<'REMOTE'
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
-apt-get update -q
-apt-get install -y -q debian-keyring debian-archive-keyring apt-transport-https curl gnupg ufw unattended-upgrades
+# A fresh droplet runs cloud-init and its first apt upgrade at boot; wait for both.
+cloud-init status --wait >/dev/null 2>&1 || true
+apt() { apt-get -o DPkg::Lock::Timeout=600 "$@"; }
+for _ in $(seq 120); do pgrep -x apt-get >/dev/null || break; sleep 5; done
+apt update -q
+apt install -y -q debian-keyring debian-archive-keyring apt-transport-https curl gnupg ufw unattended-upgrades
 if [ ! -f /usr/share/keyrings/caddy-stable-archive-keyring.gpg ]; then
 	curl -1sLf https://dl.cloudsmith.io/public/caddy/stable/gpg.key | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
 	curl -1sLf https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt > /etc/apt/sources.list.d/caddy-stable.list
-	apt-get update -q
+	apt update -q
 fi
-apt-get install -y -q caddy
+apt install -y -q caddy
 ufw allow OpenSSH >/dev/null
 ufw allow 80/tcp >/dev/null
 ufw allow 443/tcp >/dev/null
@@ -36,7 +40,7 @@ grep -q 'import /etc/caddy/captaincore-chat.caddy' /etc/caddy/Caddyfile || {
 	# Replace the stock :80 placeholder site with the relay.
 	printf 'import /etc/caddy/captaincore-chat.caddy\n' > /etc/caddy/Caddyfile
 }
-caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile >/dev/null
+caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile >/dev/null 2>&1
 systemctl reload caddy || systemctl restart caddy
 echo "ready: $(hostname) $(lsb_release -ds)"
 REMOTE
