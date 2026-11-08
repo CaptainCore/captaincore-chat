@@ -1,0 +1,31 @@
+# systemd unit for the relay on its own host (see docs/deploy.md).
+# setup-host.sh creates the captaincore-chat user and /etc/captaincore-chat;
+# install-remote.sh copies the binary and this unit. The config holds only
+# public keys and URLs, no secrets.
+[Unit]
+Description=CaptainCore Chat relay
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=captaincore-chat
+Group=captaincore-chat
+ExecStart=/opt/captaincore-chat/captaincore-chat serve --config /etc/captaincore-chat/config.json
+Restart=always
+RestartSec=2
+# SIGTERM closes the listener and lets sockets finish.
+KillSignal=SIGTERM
+TimeoutStopSec=15
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+
+[Install]
+WantedBy=multi-user.target
