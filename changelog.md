@@ -1,22 +1,29 @@
 # Changelog
 
+All notable changes to CaptainCore Chat are recorded here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
+
 ## [Unreleased]
 
+The first version: a stateless live relay for chat in the CaptainCore Manager.
+
 ### Added
-- `captaincore-chat serve`: a stateless live relay for CaptainCore Manager chat. It serves a websocket at `/v1/ws` and a health check at `/healthz`, and shuts down gracefully. Conversations are stored in the Manager, which enforces every rule; this service stores nothing.
-- `POST /internal/publish`: the Manager sends each change as a signed event.
-  - The signature is Ed25519 over a domain-separated string with a timestamp, and each signature is accepted once.
-  - Operators get every event. The owning customer gets the event unless it is internal or belongs to a guest conversation.
-  - The response says how many connections got the event, how many of those were the customer's, and which operators are watching the inbox (from their `focus` frames).
-- Identity: Ed25519 tokens signed by the Manager (`v1.<payload>.<signature>`). The service holds public keys only, and several keys can be listed for rotation. Tests sign tokens and publish bodies with PHP sodium, as the Manager does, and verify them in Go.
+- `captaincore-chat serve`: the relay. It serves a websocket at `/v1/ws`, signed events at `/internal/publish` and a health check at `/healthz`, and shuts down gracefully. It stores nothing: conversations live in the Manager, which enforces every rule.
+- Signed publish from the Manager:
+  - Ed25519 over a domain-separated string with a timestamp. Each signature is accepted once.
+  - Operators get every event. The customer who owns the conversation gets it unless it is internal or a guest conversation.
+  - The response reports how many connections got the event, how many of those were the customer's (so the Manager can hold back the email fallback while they are online) and which operators are watching the inbox (so push notifications skip them).
+- Identity tokens signed by the Manager (`v1.<payload>.<signature>`). The relay holds public keys only, and several can be listed for key rotation. Tokens refresh on an open socket without reconnecting.
 - Live frames:
-  - Typing: an operator names the customer it is for. A customer's typing goes to operators only, tagged with the sender's id.
-  - Draft preview: a customer's typing frame may carry the draft so far, which operators see as it is written (its own rate limit, last 1,000 characters). Operators' drafts are never relayed.
+  - Typing. An operator names the customer it is for; a customer's typing goes to operators only.
+  - Draft previews. A customer's typing frame may carry the draft so far, which operators see as it is written (last 1,000 characters, its own rate limit). Operators' drafts are never relayed.
   - Presence: whether an operator is online.
-  - Token refresh without reconnecting.
-- Hardening:
-  - An Origin allowlist for websockets.
-  - Tokens are never accepted in URLs or written to logs.
-  - Publish bodies are capped at 512 KB, and unknown fields are rejected.
-  - Clients that can't keep up are disconnected.
+  - Focus: operators report whether the inbox is on screen.
 - `captaincore-chat version`, `dev keys` and `dev token`.
+- Deploy scripts for a host of its own (`deploy/`): `setup-host.sh` prepares a fresh Ubuntu host with Caddy, and `install-remote.sh` builds a git ref for Linux and installs it. The host serves a small placeholder page, kept out of search engines. See `docs/deploy.md`.
+
+### Security
+- Tokens are checked for issuer, audience and expiry, are never accepted in URLs and are never logged.
+- Websockets are limited to an Origin allowlist.
+- Publish bodies are capped at 512 KB and unknown fields are rejected. The config rejects unknown fields and a pasted private key.
+- Per-connection rate limits, and clients that can't keep up are disconnected.
+- The host setup opens only SSH, 80 and 443, allows key-only SSH, adds fail2ban and unattended upgrades, and runs the relay as its own unprivileged user under systemd.

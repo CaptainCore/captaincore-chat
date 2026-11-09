@@ -1,7 +1,7 @@
 {
   "listen": "127.0.0.1:8490",
-  "issuer": "https://anchor.host",
+  "issuer": "https://example.com",
   "audience": "https://chat.example.com",
   "public_keys": ["<base64 Ed25519 public key from the Manager>"],
-  "allowed_origins": ["https://anchor.host"]
+  "allowed_origins": ["https://example.com"]
 }

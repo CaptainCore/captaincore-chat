@@ -8,3 +8,5 @@
 # Build output
 /captaincore-chat
 /dist/
+# Private planning notes, kept local
+/PLAN.md
